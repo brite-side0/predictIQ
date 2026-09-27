@@ -224,8 +224,23 @@ pub fn abs_price_to_u64(price: i64) -> u64 {
     }
 }
 
-pub fn verify_oracle_health(_e: &Env, config: &OracleConfig) -> bool {
-    !config.feed_id.is_empty()
+/// Issue #1554: Validate that an oracle config is usable before a market accepts bets.
+///
+/// Unlike a mere non-emptiness check, this verifies the `feed_id` actually decodes
+/// into a valid 32-byte feed identifier (exactly 64 hex characters). This catches
+/// malformed feed_ids at market-creation time instead of only failing later at
+/// resolution via `decode_feed_id`.
+pub fn verify_oracle_health(e: &Env, config: &OracleConfig) -> bool {
+    decode_feed_id(e, &config.feed_id).is_ok()
+}
+
+/// Issue #1554: Reject market creation when the oracle config is malformed.
+pub fn validate_oracle_config(e: &Env, config: &OracleConfig) -> Result<(), ErrorCode> {
+    if verify_oracle_health(e, config) {
+        Ok(())
+    } else {
+        Err(ErrorCode::OracleFailure)
+    }
 }
 
 /// Issue #509: Record an oracle response for consensus validation
@@ -293,5 +308,75 @@ pub fn validate_consensus(
         }
     }
 
-    consensus_outcome.ok_or(ErrorCode::OracleFailure)
+    let winning_outcome = consensus_outcome.ok_or(ErrorCode::OracleFailure)?;
+    }
+
+    Ok(winning_outcome)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use soroban_sdk::{testutils::Address as _, Address, Env, String};
+
+    fn valid_config(e: &Env) -> OracleConfig {
+        OracleConfig {
+            oracle_address: Address::generate(e),
+            feed_id: String::from_str(
+                e,
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            ),
+            max_staleness_seconds: MAX_STALENESS_SECONDS,
+            max_confidence_bps: 100,
+            strike_price: Some(100),
+            min_responses: Some(1),
+        }
+    }
+
+    #[test]
+    fn verify_oracle_health_accepts_valid_feed_id() {
+        let e = Env::default();
+        let config = valid_config(&e);
+        assert!(verify_oracle_health(&e, &config));
+        assert!(validate_oracle_config(&e, &config).is_ok());
+    }
+
+    #[test]
+    fn verify_oracle_health_rejects_wrong_length_feed_id() {
+        let e = Env::default();
+        let mut config = valid_config(&e);
+        config.feed_id = String::from_str(&e, "0123456789abcdef");
+        assert!(!verify_oracle_health(&e, &config));
+        assert_eq!(
+            validate_oracle_config(&e, &config),
+            Err(ErrorCode::OracleFailure)
+        );
+    }
+
+    #[test]
+    fn verify_oracle_health_rejects_non_hex_feed_id() {
+        let e = Env::default();
+        let mut config = valid_config(&e);
+        config.feed_id = String::from_str(
+            &e,
+            "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+        );
+        assert!(!verify_oracle_health(&e, &config));
+        assert_eq!(
+            validate_oracle_config(&e, &config),
+            Err(ErrorCode::OracleFailure)
+        );
+    }
+
+    #[test]
+    fn verify_oracle_health_rejects_empty_feed_id() {
+        let e = Env::default();
+        let mut config = valid_config(&e);
+        config.feed_id = String::from_str(&e, "");
+        assert!(!verify_oracle_health(&e, &config));
+        assert_eq!(
+            validate_oracle_config(&e, &config),
+            Err(ErrorCode::OracleFailure)
+        );
+    }
 }

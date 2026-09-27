@@ -7,8 +7,16 @@ Welcome to the PredictIQ documentation! This directory contains comprehensive gu
 ```
 docs/
 ├── README.md                    # This file
+├── API_SPEC.md                  # API reference and integration guide
+├── CONTRACT_ERRORS.md           # Smart contract error reference
 ├── DISTRIBUTED_TRACING.md       # Distributed tracing setup and usage
-└── (gas/ and security/ guides live in the repo root and services/)
+├── api-versioning.md            # API versioning policy and guidelines
+├── architecture.md              # System architecture overview
+├── data-flow.md                 # Data flow documentation
+├── deployment.md                # Deployment guide
+├── secrets.md                   # Secrets management guide
+├── pr/                          # Pull request working notes (ephemeral)
+└── runbooks/                    # Operational runbooks
 ```
 
 ## 🚀 Getting Started
@@ -16,16 +24,22 @@ docs/
 ### New to PredictIQ?
 
 1. **[Project README](../README.md)** - Start here for project overview
-2. **[API Specification](../API_SPEC.md)** - API reference and integration guide
+2. **[API Specification](./API_SPEC.md)** - API reference and integration guide
 3. **[Changelog](../CHANGELOG.md)** - Release history and notable changes
 
 ### Want to Contribute?
 
 1. **[Contributing Guide](../CONTRIBUTING.md)** - Setup, branch naming, commit conventions, and PR process
-2. **[API Specification](../API_SPEC.md)** - API reference and integration guide
+2. **[API Specification](./API_SPEC.md)** - API reference and integration guide
 3. **[Infrastructure README](../infrastructure/README.md)** - Infrastructure and deployment overview
 
 ## 📖 Documentation Categories
+
+### Architecture & Design
+
+- **[Architecture Overview](./architecture.md)** - System architecture and components
+- **[Data Flow](./data-flow.md)** - Data flow through the system
+- **[API Versioning](./api-versioning.md)** - API versioning policy and guidelines
 
 ### Dashboard Management
 
@@ -45,6 +59,16 @@ Learn how to optimize gas usage in PredictIQ smart contracts:
 
 - **[Infrastructure README](../infrastructure/README.md)** - Terraform modules, deployment, and rollback
 - **[Rollback Guide](../infrastructure/ROLLBACK.md)** - Emergency rollback procedures
+- **[Deployment Guide](./deployment.md)** - Deployment procedures and configuration
+- **[Secrets Management](./secrets.md)** - Secrets handling and configuration
+
+### Operations / Runbooks
+
+- **[Runbooks](./runbooks/)** - Operational runbooks for incident response, including:
+  - [API Outage](./runbooks/api-outage.md)
+  - [Redis Failure](./runbooks/redis-failure.md)
+  - [Stellar RPC Unavailable](./runbooks/stellar-rpc-unavailable.md)
+  - [Service Down](./runbooks/service-down.md)
 
 ### Performance
 
@@ -52,16 +76,25 @@ Learn how to optimize gas usage in PredictIQ smart contracts:
 
 ### API Service
 
+- **[API Specification](./API_SPEC.md)** - API reference and integration guide
+- **[Contract Errors](./CONTRACT_ERRORS.md)** - Smart contract error reference
 - **[Database Schema](../services/api/DATABASE.md)** - PostgreSQL schema and migration guide
 - **[Graceful Shutdown](../services/api/GRACEFUL_SHUTDOWN.md)** - Shutdown behaviour and configuration
 - **[Tracing](../services/api/TRACING.md)** - API service tracing configuration
+
+### Pull Request Working Notes
+
+- **[docs/pr/](./pr/)** and **[frontend/docs/pr/](../frontend/docs/pr/)** contain PR-specific working notes (design sketches, review context, temporary investigation notes).
+- **Purpose:** These are ephemeral working notes, not permanent documentation. They exist to support an in-flight or recently merged PR.
+- **Retention policy:** Working notes are retained only while the associated PR is open or recently merged, and are removed once their content has been folded into permanent docs (or is no longer relevant). Do not link to them as stable references.
 
 ## 🔍 Finding Documentation
 
 ### By Role
 
 **Developers:**
-- [API Specification](../API_SPEC.md)
+- [API Specification](./API_SPEC.md)
+- [Architecture Overview](./architecture.md)
 - [Database Schema](../services/api/DATABASE.md)
 - [Gas Benchmarks](../contracts/predict-iq/.gas-benchmarks/README.md)
 - [Distributed Tracing](./DISTRIBUTED_TRACING.md)
@@ -69,24 +102,32 @@ Learn how to optimize gas usage in PredictIQ smart contracts:
 **Operators / DevOps:**
 - [Infrastructure README](../infrastructure/README.md)
 - [Rollback Guide](../infrastructure/ROLLBACK.md)
+- [Deployment Guide](./deployment.md)
+- [Runbooks](./runbooks/)
 - [SLO Guide](../performance/SLO_GUIDE.md)
 
 **Users:**
 - [Project README](../README.md)
-- [API Specification](../API_SPEC.md)
+- [API Specification](./API_SPEC.md)
 
 ### By Topic
 
 **Smart Contracts:**
 - [Gas Benchmarks](../contracts/predict-iq/.gas-benchmarks/README.md)
+- [Contract Errors](./CONTRACT_ERRORS.md)
 
 **Observability:**
 - [Distributed Tracing](./DISTRIBUTED_TRACING.md)
 - [API Tracing](../services/api/TRACING.md)
 
 **Integration:**
-- [API Specification](../API_SPEC.md)
+- [API Specification](./API_SPEC.md)
+- [API Versioning](./api-versioning.md)
 - [Database Schema](../services/api/DATABASE.md)
+
+**Incident Response:**
+- [Runbooks](./runbooks/)
+- [Rollback Guide](../infrastructure/ROLLBACK.md)
 
 ## 🤝 Contributing to Documentation
 

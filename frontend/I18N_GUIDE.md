@@ -2,11 +2,15 @@
 
 ## Overview
 
-PredictIQ frontend supports multiple languages through a simple i18n system. Currently supported locales:
+PredictIQ frontend supports multiple languages through a simple i18n system. Currently implemented locales:
 - **en** - English (default)
-- **es** - Spanish
-- **fr** - French
-- **de** - German
+
+Planned locales (not yet implemented — no entries exist in `frontend/src/lib/i18n.ts` yet):
+- **es** - Spanish (planned, not yet implemented)
+- **fr** - French (planned, not yet implemented)
+- **de** - German (planned, not yet implemented)
+
+> **Note:** Translation work for `es`, `fr`, and `de` is tracked separately. Until those locales are added to the `translations` object in `frontend/src/lib/i18n.ts`, they are not selectable and the guide should not list them as supported. See the i18n tracking issue for progress.
 
 ## Adding Translations
 
