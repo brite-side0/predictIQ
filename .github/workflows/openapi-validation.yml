@@ -75,9 +75,42 @@ jobs:
           echo "  2. If you updated openapi.yaml: update SPEC_ROUTES in the contract test."
           exit 1
 
+  spec-drift:
+    name: OpenAPI Spec Drift Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-api-openapi-${{ hashFiles('services/api/Cargo.lock') }}
+
+      - name: Regenerate openapi.yaml
+        run: cargo run --bin generate_openapi
+        working-directory: services/api
+
+      - name: Diff regenerated spec against committed file
+        run: |
+          if ! git diff --exit-code -- services/api/openapi.yaml; then
+            echo "openapi.yaml is out of date with the spec-building code."
+            echo ""
+            echo "To fix, regenerate the spec locally and commit the result:"
+            echo "  cd services/api && cargo run --bin generate_openapi"
+            exit 1
+          fi
+
   all-openapi-checks-passed:
     name: All OpenAPI Checks Passed
-    needs: [spectral-lint, contract-tests]
+    needs: [spectral-lint, contract-tests, spec-drift]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
