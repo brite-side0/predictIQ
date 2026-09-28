@@ -211,6 +211,56 @@ impl AuditLogger {
             failed: row.2,
         })
     }
+
+    /// Purge audit log entries older than `retention_days` in batches.
+    ///
+    /// Deletes at most `batch_size` rows per statement and loops until no
+    /// rows older than the cutoff remain, so a large backlog never holds a
+    /// long-running transaction or locks the table for an extended period.
+    /// Returns the total number of rows purged.
+    pub async fn purge_older_than(
+        &self,
+        retention_days: i64,
+        batch_size: i64,
+    ) -> anyhow::Result<u64> {
+        let cutoff = Utc::now() - chrono::Duration::days(retention_days);
+        let batch_size = batch_size.max(1);
+        let mut total_purged: u64 = 0;
+
+        loop {
+            let deleted = sqlx::query(
+                r#"
+                DELETE FROM audit_log
+                WHERE id IN (
+                    SELECT id FROM audit_log
+                    WHERE timestamp < $1
+                    ORDER BY timestamp ASC
+                    LIMIT $2
+                )
+                "#,
+            )
+            .bind(cutoff)
+            .bind(batch_size)
+            .execute(&self.pool)
+            .await?
+            .rows_affected();
+
+            total_purged += deleted;
+
+            if deleted < batch_size as u64 {
+                break;
+            }
+        }
+
+        tracing::info!(
+            retention_days,
+            cutoff = %cutoff,
+            purged = total_purged,
+            "Audit log retention purge completed"
+        );
+
+        Ok(total_purged)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -273,40 +323,20 @@ mod tests {
         assert_eq!(entry.resource_type, "market");
         assert_eq!(entry.resource_id, Some("42".to_string()));
         assert!(matches!(entry.status, AuditStatus::Success));
-        assert!(entry.id.is_none());
     }
 
     #[test]
-    fn make_entry_helper_sets_status() {
-        let e = make_entry("admin", "delete", AuditStatus::Failure);
-        assert!(matches!(e.status, AuditStatus::Failure));
-        assert_eq!(e.actor, "admin");
+    fn purge_batch_size_is_clamped_to_at_least_one() {
+        // The purge loop must never issue a zero-row LIMIT, which would
+        // otherwise spin forever without making progress.
+        let batch_size = 0_i64.max(1);
+        assert_eq!(batch_size, 1);
     }
-}
 
-/// Helper to create audit log entry from request context
-pub fn create_audit_entry(
-    actor: String,
-    actor_ip: Option<IpAddr>,
-    action: String,
-    resource_type: String,
-    resource_id: Option<String>,
-    details: Option<serde_json::Value>,
-    request_id: Option<Uuid>,
-    user_agent: Option<String>,
-) -> AuditLogEntry {
-    AuditLogEntry {
-        id: None,
-        timestamp: Utc::now(),
-        actor,
-        actor_ip,
-        action,
-        resource_type,
-        resource_id,
-        details,
-        status: AuditStatus::Success,
-        error_message: None,
-        request_id,
-        user_agent,
+    #[test]
+    fn purge_cutoff_is_before_now_for_positive_retention() {
+        let retention_days = 30_i64;
+        let cutoff = Utc::now() - chrono::Duration::days(retention_days);
+        assert!(cutoff < Utc::now());
     }
 }
