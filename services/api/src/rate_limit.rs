@@ -204,7 +204,7 @@ pub async fn newsletter_rate_limit_middleware(
 /// in-memory limiter is sufficient here — it still protects individual nodes
 /// from local abuse without requiring a Redis round-trip on every admin call.
 pub async fn admin_rate_limit_middleware(
-    State(limiter): State<std::sync::Arc<crate::security::RateLimiter>>,
+    State(state): State<std::sync::Arc<crate::AppState>>,
     headers: HeaderMap,
     connect_info: Option<ConnectInfo<std::net::SocketAddr>>,
     req: axum::extract::Request,
@@ -212,17 +212,21 @@ pub async fn admin_rate_limit_middleware(
 ) -> Response {
     use crate::security::{extract_client_ip, RateLimitConfig};
     let ip = extract_client_ip(&headers, connect_info.as_ref(), true);
-    let config = RateLimitConfig::new(30, std::time::Duration::from_secs(60));
-    if !limiter.check(&format!("admin:{ip}"), &config).await {
+    let config = RateLimitConfig::new(
+        state.config.admin_rate_limit_max,
+        std::time::Duration::from_secs(state.config.admin_rate_limit_window_secs),
+    );
+    if !state.admin_rate_limiter.check(&format!("admin:{ip}"), &config).await {
         tracing::warn!(client_ip = %ip, "admin rate limit exceeded");
+        let retry_after = state.config.admin_rate_limit_window_secs;
         let body = RateLimitError {
             error: "rate_limit_exceeded",
             message: "Too many admin requests. Please try again later.".to_string(),
-            retry_after: 60,
+            retry_after,
         };
         return (
             StatusCode::TOO_MANY_REQUESTS,
-            [("Retry-After", "60".to_string())],
+            [("Retry-After", retry_after.to_string())],
             Json(body),
         )
             .into_response();
@@ -239,9 +243,8 @@ fn client_key_from_headers(headers: &HeaderMap) -> String {
         .unwrap_or_else(|| "unknown".to_string())
 }
 
-/// Redis-backed global rate limit middleware (100 req/min per IP).
-/// Replaces the former in-memory `global_rate_limit_middleware` from `security.rs`
-/// so limits are shared across all API instances.
+/// Redis-backed global rate limit middleware configured via environment.
+/// Shared across all API instances for coordinated per-IP rate limiting.
 pub async fn global_rate_limit_middleware(
     State(state): State<Arc<crate::AppState>>,
     headers: HeaderMap,
@@ -257,8 +260,8 @@ pub async fn global_rate_limit_middleware(
         &state.config.trusted_proxy_cidrs,
     );
     let config = RateLimitConfig {
-        max_requests:   100,
-        window_seconds: 60,
+        max_requests:   state.config.global_rate_limit_max as u64,
+        window_seconds: state.config.global_rate_limit_window_secs,
         key_prefix:     "global".to_string(),
     };
     let pool = Arc::new(state.cache.redis_pool());

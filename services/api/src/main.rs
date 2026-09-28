@@ -3,6 +3,7 @@ use predictiq_api::{
     blockchain::BlockchainClient,
     cache::RedisCache,
     config::{Config, CorsConfig},
+    cors,
     csrf::{CsrfConfig, csrf_protection_middleware},
     db::Database,
     email::{queue::EmailQueue, service::EmailService, webhook::WebhookHandler},
@@ -41,45 +42,6 @@ fn shutdown_timeout() -> Duration {
 /// When `dev_mode` is `true` the layer is fully permissive and a warning is
 /// emitted so the setting is never silent.  In all other cases only the
 /// explicitly configured origins, methods, and headers are allowed.
-fn build_cors_layer(cfg: &CorsConfig) -> CorsLayer {
-    if cfg.dev_mode {
-        tracing::warn!(
-            "CORS_DEV_MODE is enabled — all origins are permitted. \
-             This MUST NOT be used in production."
-        );
-        return CorsLayer::permissive();
-    }
-
-    let origins: Vec<HeaderValue> = cfg
-        .allowed_origins
-        .iter()
-        .filter_map(|o| o.parse::<HeaderValue>().ok())
-        .collect();
-
-    let methods: Vec<Method> = cfg
-        .allowed_methods
-        .iter()
-        .filter_map(|m| m.parse::<Method>().ok())
-        .collect();
-
-    let headers: Vec<HeaderName> = cfg
-        .allowed_headers
-        .iter()
-        .filter_map(|h| h.parse::<HeaderName>().ok())
-        .collect();
-
-    let layer = CorsLayer::new()
-        .allow_origin(origins)
-        .allow_methods(methods)
-        .allow_headers(headers)
-        .max_age(Duration::from_secs(cfg.max_age_secs));
-
-    if cfg.allow_credentials {
-        layer.allow_credentials(true)
-    } else {
-        layer
-    }
-}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -333,7 +295,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // ── CORS ──────────────────────────────────────────────────────────────────
-    let cors_layer = build_cors_layer(&state.config.cors);
+    let cors_layer = cors::build_cors_layer(&state.config.cors);
 
     // ── Versioning state (issue #920) ─────────────────────────────────────────
     let versioning_state = versioning::VersioningState::new(state.metrics.clone());

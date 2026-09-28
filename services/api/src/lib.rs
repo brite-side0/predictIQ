@@ -3,6 +3,7 @@ pub mod audit_middleware;
 pub mod body_redact;
 pub mod client_ip;
 pub mod content_type;
+pub mod cors;
 pub mod csrf;
 #[cfg(test)]
 mod resolve_market_tests;

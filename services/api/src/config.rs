@@ -370,6 +370,18 @@ pub struct Config {
     /// requests. TLS termination is expected at the ALB, not at this process.
     /// Configured via `REQUIRE_HTTPS`. Default: `false`.
     pub require_https: bool,
+    /// Admin rate limit: max requests per window. Default: 30.
+    /// Set via `ADMIN_RATE_LIMIT_MAX`. Must be > 0 in production.
+    pub admin_rate_limit_max: u32,
+    /// Admin rate limit window in seconds. Default: 60.
+    /// Set via `ADMIN_RATE_LIMIT_WINDOW_SECS`. Must be > 0.
+    pub admin_rate_limit_window_secs: u64,
+    /// Global rate limit: max requests per window per IP. Default: 100.
+    /// Set via `GLOBAL_RATE_LIMIT_MAX`. Must be > 0 in production.
+    pub global_rate_limit_max: u32,
+    /// Global rate limit window in seconds. Default: 60.
+    /// Set via `GLOBAL_RATE_LIMIT_WINDOW_SECS`. Must be > 0.
+    pub global_rate_limit_window_secs: u64,
 }
 
 impl Config {
@@ -635,6 +647,22 @@ impl Config {
             require_https: env::var("REQUIRE_HTTPS")
                 .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
                 .unwrap_or(false),
+            admin_rate_limit_max: env::var("ADMIN_RATE_LIMIT_MAX")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(30),
+            admin_rate_limit_window_secs: env::var("ADMIN_RATE_LIMIT_WINDOW_SECS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(60),
+            global_rate_limit_max: env::var("GLOBAL_RATE_LIMIT_MAX")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(100),
+            global_rate_limit_window_secs: env::var("GLOBAL_RATE_LIMIT_WINDOW_SECS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(60),
         }
     }
 
@@ -802,6 +830,32 @@ impl Config {
             eprintln!(
                 "Warning: API_KEYS is not set. All admin endpoint requests will return 401. \
                  Set API_KEYS to a comma-separated list of valid keys."
+            );
+        }
+
+        // Validate rate limit thresholds — must be > 0.
+        if self.admin_rate_limit_max == 0 {
+            errors.push(
+                "ADMIN_RATE_LIMIT_MAX: must be > 0, got 0. Set ADMIN_RATE_LIMIT_MAX to a positive integer (default: 30)."
+                    .to_string(),
+            );
+        }
+        if self.admin_rate_limit_window_secs == 0 {
+            errors.push(
+                "ADMIN_RATE_LIMIT_WINDOW_SECS: must be > 0, got 0. Set ADMIN_RATE_LIMIT_WINDOW_SECS to a positive integer (default: 60)."
+                    .to_string(),
+            );
+        }
+        if self.global_rate_limit_max == 0 {
+            errors.push(
+                "GLOBAL_RATE_LIMIT_MAX: must be > 0, got 0. Set GLOBAL_RATE_LIMIT_MAX to a positive integer (default: 100)."
+                    .to_string(),
+            );
+        }
+        if self.global_rate_limit_window_secs == 0 {
+            errors.push(
+                "GLOBAL_RATE_LIMIT_WINDOW_SECS: must be > 0, got 0. Set GLOBAL_RATE_LIMIT_WINDOW_SECS to a positive integer (default: 60)."
+                    .to_string(),
             );
         }
 

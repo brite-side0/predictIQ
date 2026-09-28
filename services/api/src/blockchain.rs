@@ -82,6 +82,22 @@ struct MonitoringState {
     watched_txs: RwLock<HashMap<String, Instant>>,
 }
 
+/// Classifies RPC errors as either transient (worth retrying) or permanent.
+///
+/// Transient errors (network timeouts, 5xx, 429) may succeed if retried.
+/// Permanent errors (4xx except 429, invalid params, out-of-range ledger)
+/// will fail identically if retried — the client should receive a clear error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RpcErrorClass {
+    /// Network-level or server-side failures (5xx, timeouts, 429).
+    /// Retrying may succeed; callers should retry with backoff.
+    Transient,
+    /// Client-side mistakes or resource constraints that will not change
+    /// (4xx except 429, invalid params, from_ledger outside retention window).
+    /// Retrying will fail identically; callers should return error immediately.
+    Permanent,
+}
+
 /// Indicates whether a response was sourced from a live RPC call or a stale
 /// cache entry served after an RPC failure.
 ///
@@ -94,6 +110,73 @@ pub enum DataSource {
     Live,
     /// The RPC call failed; this is a stale cached value served as a fallback.
     StaleFallback,
+}
+
+/// Error returned from blockchain operations that distinguishes transient vs permanent failures.
+#[derive(Debug)]
+pub enum BlockchainError {
+    /// An RPC error with its classification (transient vs permanent).
+    Rpc {
+        message: String,
+        class: RpcErrorClass,
+    },
+    /// Internal error not directly from RPC.
+    Internal(String),
+}
+
+impl std::fmt::Display for BlockchainError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Rpc { message, class } => {
+                write!(f, "RPC error ({:?}): {}", class, message)
+            }
+            Self::Internal(msg) => write!(f, "internal error: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for BlockchainError {}
+
+impl BlockchainError {
+    /// Determine whether this error is worth retrying from its message.
+    /// Transient errors include timeouts, 5xx, 429. Permanent errors include
+    /// 4xx (except 429), invalid params, out-of-range ledger.
+    fn classify_from_error_message(msg: &str) -> RpcErrorClass {
+        // HTTP client errors (4xx) except 429 are permanent.
+        if msg.contains("client error:") && !msg.contains("429") {
+            return RpcErrorClass::Permanent;
+        }
+        // JSON-RPC invalid param errors are permanent.
+        if msg.contains("Invalid params") || msg.contains("invalid_params")
+            || msg.contains("Parse error") || msg.contains("Invalid request")
+            || msg.contains("Method not found") {
+            return RpcErrorClass::Permanent;
+        }
+        // Ledger out of retention window is permanent.
+        if msg.contains("outside") && msg.contains("window")
+            || msg.contains("out of range") {
+            return RpcErrorClass::Permanent;
+        }
+        // Everything else (5xx, timeouts, network errors, 429, etc.) is transient.
+        RpcErrorClass::Transient
+    }
+
+    pub fn class(&self) -> RpcErrorClass {
+        match self {
+            Self::Rpc { class, .. } => *class,
+            Self::Internal(_) => RpcErrorClass::Transient,
+        }
+    }
+
+    /// Convert an anyhow error to BlockchainError with automatic classification.
+    pub fn from_anyhow(err: anyhow::Error) -> Self {
+        let msg = err.to_string();
+        let class = Self::classify_from_error_message(&msg);
+        Self::Rpc {
+            message: msg,
+            class,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1294,20 +1377,24 @@ impl BlockchainClient {
     /// Replay missed events from `from_ledger` up to the current confirmed tip.
     /// Idempotent: events are stored by their unique ID so re-running is safe.
     /// Progress is persisted in Redis so callers can poll for completion.
-    pub async fn replay_events(&self, from_ledger: u32) -> anyhow::Result<ReplayProgress> {
+    pub async fn replay_events(&self, from_ledger: u32) -> Result<ReplayProgress, BlockchainError> {
         let progress_key = keys::chain_replay_progress(&self.network, from_ledger);
 
         // Return cached progress if already completed
-        if let Some(cached) = self.cache.get_json::<ReplayProgress>(&progress_key).await? {
+        if let Some(cached) = self.cache.get_json::<ReplayProgress>(&progress_key).await
+            .map_err(|e| BlockchainError::Internal(e.to_string()))?
+        {
             if cached.completed {
                 return Ok(cached);
             }
         }
 
-        let latest = self.latest_ledger().await?;
+        let latest = self.latest_ledger().await
+            .map_err(BlockchainError::from_anyhow)?;
         let confirmed_tip = latest.saturating_sub(self.confirmation_ledger_lag);
 
-        let events = self.fetch_events_since(from_ledger).await?;
+        let events = self.fetch_events_since(from_ledger).await
+            .map_err(BlockchainError::from_anyhow)?;
         let events_replayed = events.len();
 
         for event in events {
@@ -1318,7 +1405,8 @@ impl BlockchainClient {
             let event_key = format!("{}:event:{}", keys::CHAIN_PREFIX, event.id);
             self.cache
                 .set_json(&event_key, &event, Duration::from_secs(30 * 60))
-                .await?;
+                .await
+                .map_err(|e| BlockchainError::Internal(e.to_string()))?;
         }
 
         let progress = ReplayProgress {
@@ -1329,7 +1417,8 @@ impl BlockchainClient {
 
         self.cache
             .set_json(&progress_key, &progress, Duration::from_secs(60 * 60))
-            .await?;
+            .await
+            .map_err(|e| BlockchainError::Internal(e.to_string()))?;
 
         tracing::info!(from_ledger, events_replayed, "event replay completed");
         Ok(progress)

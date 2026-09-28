@@ -1420,12 +1420,39 @@ pub async fn blockchain_replay(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<crate::blockchain::ReplayRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let progress = state
-        .blockchain
-        .replay_events(payload.from_ledger)
-        .await
-        .map_err(into_api_error)?;
-    Ok((StatusCode::OK, Json(progress)))
+    use crate::blockchain::{BlockchainError, RpcErrorClass};
+
+    match state.blockchain.replay_events(payload.from_ledger).await {
+        Ok(progress) => Ok((StatusCode::OK, Json(progress)).into_response()),
+        Err(BlockchainError::Rpc { message, class }) => {
+            match class {
+                RpcErrorClass::Permanent => {
+                    tracing::error!(
+                        from_ledger = payload.from_ledger,
+                        error = %message,
+                        "permanent RPC error during event replay"
+                    );
+                    Err(ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, message))
+                }
+                RpcErrorClass::Transient => {
+                    tracing::warn!(
+                        from_ledger = payload.from_ledger,
+                        error = %message,
+                        "transient RPC error during event replay, retry suggested"
+                    );
+                    Err(ApiError::new(StatusCode::SERVICE_UNAVAILABLE, message))
+                }
+            }
+        }
+        Err(BlockchainError::Internal(message)) => {
+            tracing::error!(
+                from_ledger = payload.from_ledger,
+                error = %message,
+                "internal error during event replay"
+            );
+            Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, message))
+        }
+    }
 }
 
 pub async fn warm_critical_caches(state: Arc<AppState>) -> anyhow::Result<()> {
