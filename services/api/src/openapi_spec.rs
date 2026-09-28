@@ -81,3 +81,103 @@ use crate::pagination::PaginationQuery;
     )
 )]
 pub struct ApiDoc;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use utoipa::openapi::OpenApi as OpenApiDoc;
+
+    fn build_spec() -> OpenApiDoc {
+        ApiDoc::openapi()
+    }
+
+    #[test]
+    fn spec_includes_expected_paths() {
+        let spec = build_spec();
+        let paths = &spec.paths.paths;
+
+        let expected = [
+            "/health",
+            "/api/v1/newsletter/subscribe",
+            "/api/v1/newsletter/confirm",
+            "/api/v1/newsletter/unsubscribe",
+            "/api/v1/statistics",
+            "/api/v1/markets/featured",
+            "/api/v1/markets/resolve",
+            "/api/v1/blockchain/health",
+            "/api/v1/blockchain/replay",
+            "/api/v1/email/preview",
+            "/api/v1/email/send-test",
+            "/api/v1/email/analytics",
+            "/api/v1/webhooks/sendgrid",
+            "/api/v1/audit/logs",
+            "/api/v1/audit/statistics",
+        ];
+
+        for path in expected {
+            assert!(
+                paths.contains_key(path),
+                "expected OpenAPI spec to contain path `{path}`, found: {:?}",
+                paths.keys().collect::<Vec<_>>()
+            );
+        }
+    }
+
+    #[test]
+    fn spec_includes_expected_security_schemes() {
+        let spec = build_spec();
+        let components = spec
+            .components
+            .as_ref()
+            .expect("generated spec should define components");
+
+        assert!(
+            components.security_schemes.contains_key("api_key"),
+            "expected `api_key` security scheme, found: {:?}",
+            components.security_schemes.keys().collect::<Vec<_>>()
+        );
+
+        let security = spec
+            .security
+            .as_ref()
+            .expect("generated spec should declare a global security requirement");
+        assert!(
+            security
+                .iter()
+                .any(|req| req.contains_key("api_key")),
+            "expected global security requirement to reference `api_key`"
+        );
+    }
+
+    #[test]
+    fn spec_includes_expected_server_url() {
+        let spec = build_spec();
+        let servers = spec
+            .servers
+            .as_ref()
+            .expect("generated spec should declare at least one server");
+
+        assert!(
+            servers.iter().any(|s| s.url == "/api/v1"),
+            "expected server URL `/api/v1`, found: {:?}",
+            servers.iter().map(|s| s.url.clone()).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn spec_includes_expected_schemas() {
+        let spec = build_spec();
+        let components = spec
+            .components
+            .as_ref()
+            .expect("generated spec should define components");
+
+        for schema in ["ApiError", "FeaturedMarketView", "NewsletterResponse"] {
+            assert!(
+                components.schemas.contains_key(schema),
+                "expected schema `{schema}`, found: {:?}",
+                components.schemas.keys().collect::<Vec<_>>()
+            );
+        }
+    }
+}

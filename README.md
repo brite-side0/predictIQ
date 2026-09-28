@@ -13,3 +13,6 @@
 
 <!-- handsoff-issue-1534 -->
 - #1534: Add regression test ensuring metrics.rs worker_status gauges reset correctly after a worker restart
+
+<!-- handsoff-issue-1506 -->
+- #1506: Bound blockchain event replay to prevent unbounded RPC pagination
