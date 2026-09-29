@@ -10,6 +10,7 @@ Thank you for your interest in contributing! This guide covers everything you ne
 - [Pull Request Process](#pull-request-process)
 - [Running Tests](#running-tests)
 - [Code Style](#code-style)
+- [Frontend Styling (CSP-Safe)](#frontend-styling-csp-safe)
 - [Security](#security)
 
 ---
@@ -307,20 +308,60 @@ that at minimum covers:
 ## Minimum Supported Rust Version (MSRV)
 
 The `services/api` crate declares a `rust-version` field in its `Cargo.toml`.
-This is the **oldest** Rust toolchain version the c
+This is the **oldest** Rust
+
+---
+
+## Frontend Styling (CSP-Safe)
+
+### The rule: no inline `style` props
+
+Do **not** use the `style={{ ... }}` prop on React/Next.js components for
+anything that affects rendering. Use CSS classes (or CSS modules) instead.
+
+```tsx
+// ❌ Don't — CSP strips this at runtime, so the style silently disappears
+<div style={{ padding: 16, color: 'red' }}>…</div>
+
+// ✅ Do — put the rules in a stylesheet and reference them by class
+<div className="panel panel--error">…</div>
+```
+
+### Why (this is not a style preference)
+
+The frontend is served under a strict **Content-Security-Policy** that does not
+allow inline styles. When a component sets `style={{ ... }}`, the browser
+**blocks or strips** the resulting inline style attribute — the element renders
+with no styling at all. This is a real production bug that was fixed in
+`5bd5e51` (AppShell chrome) and `e80a15b` (all remaining inline `style` props),
+and it is easy to reintroduce by accident because the code still *looks*
+correct in the editor and in tests that don't enforce CSP.
+
+Because the failure is silent (no error, just missing styles), the convention
+below is mandatory rather than optional.
+
+### Required pattern
+
+- Define styles in CSS (global stylesheet or a CSS module) and apply them via
+  `className`.
+- For dynamic values, prefer a class variant (e.g. `panel--error`) or a CSS
+  custom property set through a class, rather than a `style` prop.
+- If a value genuinely cannot be expressed as a class, raise it in the PR
+  description so the CSP implications can be reviewed — do not add an inline
+  `style` prop silently.
+
+### Enforcement
+
+There is currently **no lint rule or CI check** that blocks inline `style`
+props, so this convention relies on review. Adding an ESLint rule such as
+[`react/forbid-dom-props`](https://github.com/jsx-eslint/eslint-plugin-react/blob/master/docs/rules/forbid-dom-props.md)
+configured to forbid `style` is recommended and tracked separately; until it
+lands, reviewers should flag any new `style={{ ... }}` prop.
 
 ---
 
 ## Security
 
-Please **do not** report security vulnerabilities through public GitHub issues,
-discussions, or pull requests.
-
-Instead, report them privately via **GitHub Security Advisories** for this
-repository:
-
-- https://github.com/solutions-plug/predictIQ/security/advisories/new
-
-This is the verified, monitored channel for security reports. See
-[`SECURITY.md`](SECURITY.md) for the full disclosure policy and response
-timelines.
+If you discover a security vulnerability, please **do not** open a public issue.
+Instead, report it privately to the maintainers so it can be triaged and fixed
+before disclosure.
