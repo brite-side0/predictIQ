@@ -16,3 +16,6 @@
 
 <!-- handsoff-issue-1506 -->
 - #1506: Bound blockchain event replay to prevent unbounded RPC pagination
+
+<!-- handsoff-issue-1500 -->
+- #1500: Remove dead self-referential duration calculation in CircuitBreaker::state()
