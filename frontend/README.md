@@ -50,3 +50,9 @@ configured to forbid the `style` prop would catch regressions at lint time:
 
 Until that rule (or an equivalent CI check) lands, treat any new `style` prop as
 a review blocker.
+
+## Further reading
+
+- [Internationalization (i18n) guide](./I18N_GUIDE.md) — how to add and manage
+  translations in the frontend.
+- [`docs/`](./docs/) — additional frontend documentation.
