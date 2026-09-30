@@ -1,60 +1,134 @@
-# Frontend Styling Conventions
+# Styling Guide
 
-## The rule: no inline `style` props
+## CSP Constraint: Inline `style` Props Are Not Allowed
 
-Do **not** use the `style` prop on React components or DOM elements for anything
-that affects rendering:
+This project runs under a strict **Content Security Policy (CSP)** in production. The policy does **not** include `'unsafe-inline'` for styles, which means:
 
-```jsx
-// ❌ Don't do this
-<div style={{ marginTop: 8, color: 'red' }}>…</div>
+- Inline `style` attributes on DOM elements are **stripped or blocked** by the browser.
+- React's `style={{ ... }}` prop compiles down to an inline `style` attribute, so it is affected by the same restriction.
+- The failure is **silent**: no exception is thrown, no console error is guaranteed, and the element simply renders without the intended styles. This makes it easy to ship a broken UI without noticing during development (where CSP is often relaxed).
+
+Because of this, **do not use the `style` prop** on DOM elements or on components that forward it to the DOM. Use CSS classes or CSS modules instead.
+
+## Required Pattern: CSS Classes / CSS Modules
+
+The migration established the following pattern for all styling:
+
+1. **Static styles** live in a stylesheet (global CSS or a CSS module).
+2. **Dynamic styles** are expressed by toggling **class names**, not by computing inline style objects.
+3. Components receive class names via the `className` prop.
+
+### Incorrect
+
+```tsx
+// ❌ Inline style prop — stripped/blocked by CSP in production.
+function ProgressBar({ percent }: { percent: number }) {
+  return (
+    <div
+      className="progress"
+      style={{ width: `${percent}%` }} // silently ignored under CSP
+    />
+  );
+}
 ```
 
-Instead, express styling through CSS classes (or CSS modules) and apply them via
-`className`:
-
-```jsx
-// ✅ Do this
-<div className="stack-sm text-danger">…</div>
+```tsx
+// ❌ Passing a style object through to a DOM element.
+function Badge({ color, children }: { color: string; children: React.ReactNode }) {
+  return <span style={{ color }}>{children}</span>;
+}
 ```
 
-## Why: Content Security Policy strips inline styles
+### Correct
 
-Our production Content Security Policy does not allow inline styles. When the
-browser enforces that policy, inline `style` attributes are **silently dropped** —
-the element still renders, but without the styling. This is not a build error and
-not a test failure; it only shows up in production, which is exactly why it went
-unnoticed for so long.
+Use a CSS module (or global class) and toggle classes:
 
-This was a real production bug. Two commits fixed it:
+```css
+/* ProgressBar.module.css */
+.progress {
+  height: 4px;
+  background: var(--color-accent);
+}
 
-- `5bd5e51` — moved AppShell chrome off inline styles (CSP was dropping them)
-- `e80a15b` — migrated every remaining inline `style` prop to CSS classes
+.width0 { width: 0%; }
+.width25 { width: 25%; }
+.width50 { width: 50%; }
+.width75 { width: 75%; }
+.width100 { width: 100%; }
+```
 
-Because the failure mode is silent and environment-specific, the constraint is
-easy to reintroduce by accident. That is why it is documented here: so a future
-PR does not ship the same bug again.
+```tsx
+// ✅ Class-based styling — CSP-safe.
+import styles from "./ProgressBar.module.css";
 
-## The required pattern
+const WIDTH_CLASS: Record<number, string> = {
+  0: styles.width0,
+  25: styles.width25,
+  50: styles.width50,
+  75: styles.width75,
+  100: styles.width100,
+};
 
-- Put styling in CSS (global stylesheets or CSS modules) and reference it with
-  `className`.
-- For dynamic values that genuinely must vary at runtime, prefer toggling a
-  class (e.g. `className={isActive ? 'is-active' : ''}`) or setting a CSS custom
-  property through a class rather than writing an inline `style` object.
-- If you believe you have a case that truly requires an inline style, raise it in
-  the PR description first — do not add one silently.
+function ProgressBar({ percent }: { percent: number }) {
+  const widthClass = WIDTH_CLASS[percent] ?? styles.width0;
+  return <div className={`${styles.progress} ${widthClass}`} />;
+}
+```
 
-## Enforcement
+```tsx
+// ✅ Variant classes instead of inline color.
+import styles from "./Badge.module.css";
 
-There is currently **no** lint rule or CI check that blocks inline `style` props,
-so nothing mechanically prevents a regression. Adding one is recommended:
+function Badge({ variant, children }: { variant: "info" | "warn"; children: React.ReactNode }) {
+  return <span className={`${styles.badge} ${styles[variant]}`}>{children}</span>;
+}
+```
 
-- ESLint's [`react/forbid-dom-props`](https://github.com/jsx-eslint/eslint-plugin-react/blob/master/docs/rules/forbid-dom-props.md)
-  can be configured with `forbid: ['style']` to flag inline `style` props on DOM
-  elements.
-- For components that forward a `style` prop, `react/forbid-component-props`
-  covers the same case.
+For values that are genuinely dynamic and cannot be enumerated as classes, prefer:
 
-Until such a rule is enabled, this convention is enforced by review. Please keep
-it in mind when reviewing frontend changes.
+- A CSS custom property set via a class or a small set of classes, or
+- A dedicated stylesheet rule keyed off a `data-*` attribute, or
+- A CSS-in-JS solution that emits a real stylesheet (not inline attributes).
+
+If you believe you have a case that truly requires an inline style, raise it for review before adding one — it will not work in production.
+
+## Enforcement Gap
+
+There is currently **no lint rule** that catches inline `style` props. This is why the CSP violations were able to land in the first place. To prevent regressions, add the following ESLint rules:
+
+```jsonc
+// .eslintrc (excerpt)
+{
+  "rules": {
+    "react/forbid-dom-props": [
+      "error",
+      { "forbid": [{ "propName": "style", "message": "Inline style props are blocked by CSP. Use a CSS class or CSS module instead." }] }
+    ],
+    "react/forbid-component-props": [
+      "error",
+      { "forbid": [{ "propName": "style", "message": "Inline style props are blocked by CSP. Use a CSS class or CSS module instead." }] }
+    ]
+  }
+}
+```
+
+`react/forbid-dom-props` covers intrinsic elements (`<div style={...}>`), while `react/forbid-component-props` covers custom components that may forward `style` to the DOM. Both are needed to close the gap.
+
+Until such a rule is enabled, this convention is enforced by review. Please keep it in mind when reviewing frontend changes.
+
+## Historical Context
+
+This constraint was discovered the hard way. Two commits fixed the fallout from inline styles that were silently dropped under CSP:
+
+- **`5bd5e51`** — initial fix replacing inline `style` props with CSS classes (moved AppShell chrome off inline styles).
+- **`e80a15b`** — follow-up cleanup covering remaining components and edge cases (migrated every remaining inline `style` prop to CSS classes).
+
+These commits are the reference for the pattern described above. When in doubt, look at how those changes were structured.
+
+## Summary
+
+- **Never** use the `style` prop on DOM elements or components that forward it to the DOM.
+- Use **CSS classes / CSS modules** and toggle `className` for dynamic styling.
+- The failure mode is **silent** — it will not show up in dev if CSP is relaxed.
+- Add `react/forbid-dom-props` and `react/forbid-component-props` to enforce this automatically.
+- Until enforcement is enabled, this convention is enforced by review.

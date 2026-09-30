@@ -360,7 +360,37 @@ lands, reviewers should flag any new `style={{ ... }}` prop.
 
 ---
 
+## Code Style
+
+### Frontend Styling
+
+Frontend styling conventions are documented in
+[`frontend/docs/styling.md`](frontend/docs/styling.md). Please read that
+document before making UI changes.
+
+**No inline styles.** Do not use the `style` prop on JSX elements. All
+styling must go through the project's approved mechanisms (e.g. Tailwind
+utility classes, CSS Modules, or the shared design-system components).
+Inline styles bypass theming, break static analysis, and make visual
+regression testing unreliable. If you believe an inline style is
+unavoidable, raise it in the PR description and get maintainer sign-off
+before merging.
+
+---
+
 ## Security
+
+Please **do not** report security vulnerabilities through public GitHub issues,
+discussions, or pull requests.
+
+Instead, report them privately via **GitHub Security Advisories** for this
+repository:
+
+- https://github.com/solutions-plug/predictIQ/security/advisories/new
+
+This is the verified, monitored channel for security reports. See
+[`SECURITY.md`](SECURITY.md) for the full disclosure policy and response
+timelines.
 
 If you discover a security vulnerability, please **do not** open a public issue.
 Instead, report it privately to the maintainers so it can be triaged and fixed
