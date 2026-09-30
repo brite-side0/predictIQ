@@ -311,6 +311,24 @@ This is the **oldest** Rust toolchain version the c
 
 ---
 
+## Code Style
+
+### Frontend Styling
+
+Frontend styling conventions are documented in
+[`frontend/docs/styling.md`](frontend/docs/styling.md). Please read that
+document before making UI changes.
+
+**No inline styles.** Do not use the `style` prop on JSX elements. All
+styling must go through the project's approved mechanisms (e.g. Tailwind
+utility classes, CSS Modules, or the shared design-system components).
+Inline styles bypass theming, break static analysis, and make visual
+regression testing unreliable. If you believe an inline style is
+unavoidable, raise it in the PR description and get maintainer sign-off
+before merging.
+
+---
+
 ## Security
 
 Please **do not** report security vulnerabilities through public GitHub issues,
