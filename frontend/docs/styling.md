@@ -114,12 +114,14 @@ There is currently **no lint rule** that catches inline `style` props. This is w
 
 `react/forbid-dom-props` covers intrinsic elements (`<div style={...}>`), while `react/forbid-component-props` covers custom components that may forward `style` to the DOM. Both are needed to close the gap.
 
+Until such a rule is enabled, this convention is enforced by review. Please keep it in mind when reviewing frontend changes.
+
 ## Historical Context
 
 This constraint was discovered the hard way. Two commits fixed the fallout from inline styles that were silently dropped under CSP:
 
-- **`5bd5e51`** — initial fix replacing inline `style` props with CSS classes.
-- **`e80a15b`** — follow-up cleanup covering remaining components and edge cases.
+- **`5bd5e51`** — initial fix replacing inline `style` props with CSS classes (moved AppShell chrome off inline styles).
+- **`e80a15b`** — follow-up cleanup covering remaining components and edge cases (migrated every remaining inline `style` prop to CSS classes).
 
 These commits are the reference for the pattern described above. When in doubt, look at how those changes were structured.
 
@@ -129,3 +131,4 @@ These commits are the reference for the pattern described above. When in doubt, 
 - Use **CSS classes / CSS modules** and toggle `className` for dynamic styling.
 - The failure mode is **silent** — it will not show up in dev if CSP is relaxed.
 - Add `react/forbid-dom-props` and `react/forbid-component-props` to enforce this automatically.
+- Until enforcement is enabled, this convention is enforced by review.
